@@ -1,0 +1,62 @@
+---
+title: "Wiley Chapter - graphics"
+output:
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: inline
+---
+
+The data come from the FCSM2012 paper, manually converting the LaTeX table code into a CSV file. 
+
+```{r}
+table.raw.pub.md <- read.csv("../data/Table2/table.serial-correlation-all-raw-pub-md.csv", stringsAsFactors=FALSE)
+
+```
+```{r setup_libs, echo=FALSE,warning=FALSE,message=FALSE}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(RColorBrewer)
+library(latex2exp)
+
+```
+
+```{r}
+# format it for graphing
+mydf.new <-   gather(table.raw.pub.md,Variable,value,-Percentile)
+mydf.new$Percentile <- mydf.new$Percentile/100
+# Example table:
+mydf.new
+```
+
+
+```{r}
+# graph the whole thing
+# Note: to array multiple plots - useful here - use "gridExtra" and grid.arrange()
+k <- ggplot(mydf.new,aes(x=value,y=Percentile,color=Variable))
+k + geom_line() +
+  geom_point(color="grey20",shape="circle") +
+  theme_minimal() +
+  scale_color_brewer(palette = "Set1") +
+  stat_function(fun = pnorm, args = list(mean=0, sd=0.015)) + 
+  scale_x_continuous(TeX("$\\Delta r = r - r^*$")) 
+```
+
+```{r}
+ggsave("../figures/Fig4_graph_qwi_sercorr_md.png",width=4,height=4)
+```
+Get at the interquartile range in a table:
+```{r}
+table.iq <- gather(table.raw.pub.md,Variable,value,-Percentile) %>%
+  rename(p = Percentile ) %>% 
+  spread(p,value,sep="") 
+table.iq$semi.iq <- table.iq$p75 - table.iq$p25
+table.iq <- rename(table.iq, Semi.interquartile.range = semi.iq, Median = p50)
+table.iq[,c("Variable","Median","Semi.interquartile.range")]
+```
+Write out the dataset
+```{r}
+write.csv(table.iq[,c("Variable","Median","Semi.interquartile.range")], "../data/derived_Table2/Table2_table.sercorr.md.csv", row.names=F)
+```
+

@@ -1,0 +1,198 @@
+---
+title: "Multiplicative input noise infusion"
+author: "Lars Vilhuber"
+output:
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: inline
+---
+```{r,echo=FALSE}
+set.seed(12345)
+size <- 10000
+widthfig <- 6
+heightfig <- 3
+```
+
+First proposed by [Evans, Zayatz and Slanta (1998)](http://www.jos.nu/Articles/abstract.asp?article=144537), multiplicative input noise infusion (henceforth simply "noise infusion") is used as a disclosure-avoidance measure. See also [our implementation](https://ideas.repec.org/h/nbr/nberch/0485.html) in the [Quarterly Workforce Indicators](http://lehd.ces.census.gov/data) (published in 2009, but first implemented in 2003).
+
+This repository illustrates noise infusion with some toy data. 
+Please feel free [to fork it](https://github.com/larsvilhuber/rampnoise/) and play with it.
+
+# Creating toy data
+
+Let's generate some random data:
+```{r}
+employment <- round(as.data.frame(exp(runif(size,log(1),log(42000)))))
+names(employment) <- c("Count")
+```
+
+This fake employment distribution looks like this (actually, real employment is different):
+
+```{r, echo=FALSE}
+hist(employment[,1],breaks = size/10)
+```
+
+or for a closeup:
+
+```{r, echo=FALSE}
+hist(employment[ which(employment$Count < 1000),],breaks = size/100)
+```
+
+but most importantly, it has a **mean of `r round(mean(employment$Count),0.1)`**, a **median of `r median(employment$Count)`**, and **Q25 of `r quantile(employment$Count,0.25)`**.
+
+# Ramp distribution
+The most common noise distribution used is a ramp distribution.
+So what is a ramp distribution?
+$$
+	p\left( {\delta _{j}}\right) =\left\{
+			\begin{array}{ccl} 
+			\dfrac{ {1+ b - \delta } }{\left( {b - a} \right)^2}
+					&,&\;\delta \in \mbox{ }\left[ {1+a,1+b} \right] \\ 
+				\dfrac{ {\delta - (1 - b)} }{\left( {b - a} \right)^2} 
+				&,&\;\delta \in \left[ {1 - b,1 - a} \right] \\ 
+				0&,&\;\mbox{ otherwise } \\
+				 \end{array}
+		\right. 
+$$
+with a cumulative distribution of
+$$
+		F\left( {\delta _{j}}\right) =\left\{ 
+			\begin{array}{*{20}c}
+				{\mbox{0},\;\delta < {2-b} } \\ 
+				{ 
+				  {\left[ {\left( {\delta - (1-b)} \right)^2} \right]} 
+				  {\left/ {\vphantom { 
+				                {\left[ {\left( {\delta - (1-b)} \right)^2} \right]} 
+				                {\left[ {2\left( {b - a} \right)^2} \right]} 
+				                     } 
+				          } 
+				    \right. 
+				  } 
+				  {\left[ {2\left( {b - a} \right)^2} \right]},\;\delta \in \left[ {1 - b,1 - a} \right]\mbox{ } 
+				} \\
+				{\mbox{0.5}, \;\delta \in \mbox{ }\left( {1-a,1+a} \right)\mbox{ } } \\
+				{\mbox{0.5} + 
+				  {\left[ {\left( {b - a} \right)^2 - \left( {1+b - \delta } \right)^2} \right]}
+				  {\left/ {\vphantom {
+				              {\left[ {\left( {b - a} \right)^2 - \left( {1+b - \delta } \right)^2} \right]}
+				              {\left[ {2\left( {b - a} \right)^2} \right]} } 
+				          } \right. 
+				  } 
+				  {\left[ {2\left( {b - a} \right)^2} \right]},
+				  \;\delta \in \mbox{ }\left[ {1+a,1+b} \right]\mbox{ }
+				} \\ 
+				{\mbox{1}, \;\delta > {1+b} } \\ 
+			\end{array}
+			\right. 
+$$
+		
+```{r}
+dramp <- function(x,a,b) {
+  if ( b< a) {
+    c <- a
+    a <- b
+    b <- c
+  }
+  part1 <- which(x < 1- b )
+  part2 <- intersect(which (x >= 1-b),which(x <= 1-a))
+  part3 <- intersect(which (x > 1-a), which(x< 1+a))
+  part4 <- intersect(which (x >= 1+a),which(x <= 1+b))
+  part5 <- which(x > 1+ b )
+
+  y <- x
+  y[part1] <- 0
+  y[part2] <- (x[part2] - (1-b))/ ( b - a )^2
+  y[part3] <- 0
+  y[part4] <- ( 1 + b -x[part4])/ ( b - a )^2
+  y[part5] <- 0
+  return(y)
+}
+
+invcramp <- function(y,a,b) {
+  part1 <- intersect(which(y>0.5),which(y<=1))
+  part2 <- intersect(which(y<=0.5),which(y>=0))
+  part3 <- intersect(which(y<0),which(y>1))
+  x <- y
+  x[part1] <-  1+b - ((1-2*(y[part1]-0.5))*(b-a)^2)^0.5
+  x[part2] <-  1-b + ((  2*(y[part2]    ))*(b-a)^2)^0.5
+  x[part3] <-  0
+  return(x)
+  }
+```
+
+
+\noindent where $a={c}/{100}$ and $b={d}/{100}$ are constants chosen
+		such that the true value is distorted by a minimum of $c$ percent and a
+		maximum of $d$ percent. This produces a random noise factor centered around 1 with
+		distortion of at least $c$ and at most $d$ percent.
+		
+```{r plot_ramp, echo=FALSE}
+library(ggplot2)
+y=seq(0.5,1.5,by = 0.001)
+z <- dramp(y,0.1,0.25)
+w <- as.data.frame(cbind(y,z))
+ggplot(w,aes(x=y,y=z)) +
+    geom_point(size=1) +
+    theme(axis.line = element_line(colour = "black"),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_blank(),
+          axis.text.x = element_text(size = 12)
+          )+
+  scale_x_continuous(breaks=c(0.75,0.9,1,1.1,1.25),labels=c("1-b","1-a",1,"1+a","1+b"))+
+  theme(axis.text.y = element_blank())+
+  xlab("")+
+  ylab("")+ 
+  geom_vline(xintercept=0.9,linetype="dashed")+
+  geom_vline(xintercept=0.75,linetype="dashed")+
+  geom_vline(xintercept=1.1,linetype="dashed")+
+  geom_vline(xintercept=1.25,linetype="dashed")
+ggsave("../figures/Fig3_rampdist.png",width=widthfig,height=heightfig)
+```
+```{r plot_cum_ramp, echo=FALSE}
+y=seq(0,1,by = 0.001)
+x <- invcramp(y,0.1,0.25)
+w <- as.data.frame(rbind(c(0.7,0),cbind(x,y),c(1.3,1)))
+
+myplot <- ggplot(w,aes(x=x,y=y)) +
+    geom_line(size=1) +
+    theme(axis.line = element_line(colour = "black"),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_blank()
+          )+
+  scale_x_continuous(breaks=c(0.75,0.9,1,1.1,1.25),
+                     labels=c("1-b","1-a",1,"1+a","1+b"),
+                     )+
+  theme(axis.text.y = element_blank())+
+  xlab("")+
+  ylab("")
+myplot
+ggsave("../figures/Fig3_rampdist_cum.png")
+```
+
+# Distorting the data
+
+Applying the multiplicative noise to the counts yields protected counts. Since the mean of the noise distribution is unity by design, the two distributions are likely to have similar means. 
+```{r fuzzdata}
+employment$uniform <- runif(nrow(employment))
+employment$fuzzfactor <- invcramp(employment$uniform,0.1,0.25)
+employment$NoisyCount <- round(employment$Count * employment$fuzzfactor,0)
+```
+
+If we compare the original data 
+
+```{r, echo=FALSE}
+hist(employment[ which(employment$Count < 1000),c("Count")],breaks = size/100)
+```
+
+against the protected data
+
+```{r, echo=FALSE}
+hist(employment[ which(employment$NoisyCount < 1000),c("NoisyCount")],breaks = size/100)
+```
+
+we see very similar distributions. The user can verify that the univariate statistics are very similar: the raw data has a **mean of `r round(mean(employment$Count),1)`** against a **mean of  `r round(mean(employment$NoisyCount),1)`**  in the protected data (a difference of `r abs(round(100*(mean(employment$Count) -mean(employment$NoisyCount))/mean(employment$Count),3))`%).

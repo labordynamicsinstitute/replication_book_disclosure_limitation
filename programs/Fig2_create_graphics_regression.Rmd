@@ -1,0 +1,113 @@
+---
+title: "Wiley Chapter - graphics - Fig 2 - regressions"
+output:
+  html_document:
+    fig_caption: yes
+    fig_height: 4
+    fig_width: 8
+    keep_md: yes
+editor_options:
+  chunk_output_type: inline
+---
+
+
+```{r}
+library(readxl)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(RColorBrewer)
+#library(gridExtra)
+library(svglite)
+widthfig <- 8
+heightfig <- 4
+```
+```{r}
+datalist = list()
+
+for ( table in seq(1,4,1)) {
+tmp <- read_excel("../data/Fig2/AnalyticValidityTables8.xls",skip = 2, sheet = table)
+# get year
+tmp <- tmp[,1:7]
+names(tmp) <- c("Varname","Synthetic.Coef","Completed.Coef","Synthetic.CI_Lo","Synthetic.CI_Hi","Completed.CI_Lo","Completed.CI_Hi")
+tmp.year <- names(read_excel("../data/Fig2/AnalyticValidityTables8.xls",n_max = 1, 
+                             sheet = table ))[1]
+tmp.year <- sub("  "," ",tmp.year)
+print(paste("Processing ",tmp.year))
+tmp$DemoGroup = paste(unlist(strsplit(tmp.year," "))[12],unlist(strsplit(tmp.year," "))[13],sep = " ")
+tmp$year = as.numeric(unlist(strsplit(tmp.year," "))[10])
+datalist[[table]] <- tmp
+}
+
+AnalyticValidityTables8 <- do.call(rbind,datalist)
+table(AnalyticValidityTables8$DemoGroup)
+```
+
+```{r}
+# format it for graphing
+mydf.new <-   gather(AnalyticValidityTables8,key,value,-DemoGroup,-year,-Varname) %>%
+  separate(col = key,into=c("SynComplt","Stat"),extra="merge") %>%
+  spread(key = Stat,value = value) %>%
+  group_by(year,SynComplt,DemoGroup) %>%
+  subset(Varname != "Intercept")
+# Example table:
+mydf.new$Type <- paste(mydf.new$SynComplt,mydf.new$DemoGroup,sep=", ")
+mydf.new
+```
+```{r}
+# graph the whole thing
+# Note: to array multiple plots - useful here - use "gridExtra" and grid.arrange()
+
+gbf <- ggplot(subset(mydf.new,DemoGroup=="black females"),aes(x=Varname,y=Coef,fill=Type,color=Type))
+gwf <- ggplot(subset(mydf.new,DemoGroup=="white females"),aes(x=Varname,y=Coef,fill=Type,color=Type))
+gbm <- ggplot(subset(mydf.new,DemoGroup=="black males"),aes(x=Varname,y=Coef,fill=Type,color=Type))
+gwm <- ggplot(subset(mydf.new,DemoGroup=="white males"),aes(x=Varname,y=Coef,fill=Type,color=Type))
+gall <- ggplot(mydf.new,aes(x=Varname,y=Coef,fill=Type,color=Type))
+
+myformat <- function(k,title="")  {
+  k <- k + geom_errorbar(aes(ymin=CI_Lo,ymax=CI_Hi),alpha=0.9,width=1,position=position_dodge(0.5))  +
+  geom_point(color="grey20",aes(shape=Type),size=2,position=position_dodge(0.5)) +
+  theme_minimal() + ggtitle(title) +
+  #scale_color_brewer(palette = "Set1") +
+  scale_colour_grey(start = 0 , end=0.3) +
+  scale_x_discrete("Variables",expand = c(0,2)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),axis.title.x = element_blank()) +
+  theme(legend.position="none")
+  #theme(legend.title=element_blank(),legend.justification=c(1,0), legend.position=c(1,0.7)) 
+  return(k)
+}
+#png("graph_ssb_coefs_alt.png",width=widthfig,height=heightfig)
+#grid.arrange(myformat(gbf),myformat(gwf),myformat(gbm),myformat(gwm),ncol=2)
+#pdf("graph_ssb_coefs_alt.pdf")
+
+myformat(gall) + facet_wrap(~ DemoGroup)
+ggsave("../figures/Fig2_graph_ssb_coefs_alt.png",width=widthfig,height=widthfig)
+ggsave("../figures/Fig2_graph_ssb_coefs_alt.svg",width=widthfig,height=widthfig)
+ggsave("../figures/Fig2_graph_ssb_coefs_alt.tiff",width=widthfig,height=widthfig)
+```
+
+```{r}
+myformat(gbf,title="Black women")
+ggsave("../figures/Fig2_graph_ssb_coefs_alt_gbf.png",width=widthfig,height=heightfig)
+ggsave("../figures/Fig2_graph_ssb_coefs_alt_gbf.svg",width=widthfig,height=heightfig)
+ggsave("../figures/Fig2_graph_ssb_coefs_alt_gbf.tiff",width=widthfig,height=heightfig)
+
+```
+```{r}
+myformat(gbm,title="Black men")
+ggsave("../figures/Fig2_graph_ssb_coefs_alt_gbm.png",width=widthfig,height=heightfig)
+ggsave("../figures/Fig2_graph_ssb_coefs_alt_gbm.svg",width=widthfig,height=heightfig)
+ggsave("../figures/Fig2_graph_ssb_coefs_alt_gbm.tiff",width=widthfig,height=heightfig)
+```
+```{r}
+myformat(gwm,title="White men")
+ggsave("../figures/Fig2_graph_ssb_coefs_alt_gwm.png",width=widthfig,height=heightfig)
+ggsave("../figures/Fig2_graph_ssb_coefs_alt_gwm.svg",width=widthfig,height=heightfig)
+ggsave("../figures/Fig2_graph_ssb_coefs_alt_gwm.tiff",width=widthfig,height=heightfig)
+```
+```{r}
+myformat(gwf,title="White women")
+ggsave("../figures/Fig2_graph_ssb_coefs_alt_gwf.png",width=widthfig,height=heightfig)
+ggsave("../figures/Fig2_graph_ssb_coefs_alt_gwf.svg",width=widthfig,height=heightfig)
+ggsave("../figures/Fig2_graph_ssb_coefs_alt_gwf.tiff",width=widthfig,height=heightfig)
+```

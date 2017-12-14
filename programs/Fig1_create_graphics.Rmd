@@ -1,0 +1,128 @@
+---
+title: "Wiley Chapter - graphics - Fig 1"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+```{r}
+library(readxl)
+library(tidyr)
+library(dplyr)
+library(svglite)
+library(ggplot2)
+library(RColorBrewer)
+```
+```{r}
+datalist = list()
+
+for ( table in seq(3,9,2)) {
+tmp <- read_excel("../data/Fig1/AnalyticValidityTables1.xls",skip = 2, sheet = table-2)
+# get year
+names(tmp) <- c("DemoGroup","TypeBenefit","Synthetic.Mean","Completed.Mean","Synthetic.CI_Lo","Synthetic.CI_Hi","Completed.CI_Lo","Completed.CI_Hi","DF.Not.Exist","Variance.Synthetic","Variance.Completed")
+tmp <- tmp[,c("DemoGroup","TypeBenefit","Synthetic.Mean","Completed.Mean","Synthetic.CI_Lo","Synthetic.CI_Hi","Completed.CI_Lo","Completed.CI_Hi")]
+tmp.year <- names(read_excel("../data/Fig1/AnalyticValidityTables1.xls",n_max = 1, 
+                             sheet = table -2 ))[1]
+tmp.year <- sub("  "," ",tmp.year)
+tmp$year = as.numeric(unlist(strsplit(tmp.year," "))[8])
+datalist[[table]] <- tmp
+}
+
+AnalyticValidityTables1 <- do.call(rbind,datalist)
+# fill in previous missing values 
+while(length(ind <- which(is.na(AnalyticValidityTables1$DemoGroup))) > 0){
+  AnalyticValidityTables1$DemoGroup[ind] <- AnalyticValidityTables1$DemoGroup[ind -1]
+}
+table(AnalyticValidityTables1$DemoGroup)
+table(AnalyticValidityTables1$TypeBenefit)
+```
+
+```{r}
+# format it for graphing
+mydf.new <- subset(AnalyticValidityTables1,(DemoGroup == "black females" | DemoGroup == "black males" ) & TypeBenefit=="own retirement") %>%
+  gather(key,value,-DemoGroup,-TypeBenefit,-year) %>%
+  separate(col = key,into=c("SynComplt","Stat"),extra="merge") %>%
+  spread(key = Stat,value = value) %>%
+  unite(Type,SynComplt,DemoGroup,sep=", ") %>%
+  group_by(year,Type)
+# Example table:
+mydf.new
+```
+```{r}
+# graph the whole thing
+# Note: to array multiple plots - useful here - use "gridExtra" and grid.arrange()
+k <- ggplot(mydf.new,aes(x=year,y=Mean,fill=Type,color=Type))
+k + geom_ribbon(aes(ymin=CI_Lo,ymax=CI_Hi),alpha=0.3,linetype="blank") +
+  geom_point(color="grey20",aes(shape=Type)) +
+  geom_line(aes(linetype=Type)) +
+  theme_minimal() +
+  scale_color_brewer(palette = "Set1") +
+  scale_x_discrete("Year",limits=unique(mydf.new$year)) +
+  scale_y_continuous("Employment rate",limits=c(0,max(mydf.new$CI_Hi))) +
+  theme(legend.title=element_blank(),legend.justification=c(1,0), legend.position=c(0.5,0.2))
+ggsave("../figures/Fig1_graph_ssb.png",width=4,height=4)
+```
+
+```{r}
+# Alternative graph
+k + geom_errorbar(aes(ymin=CI_Lo,ymax=CI_Hi),alpha=0.9,width=1,position=position_dodge(1))  +
+  geom_point(color="grey20",aes(shape=Type),position=position_dodge(1)) +
+  geom_line(linetype="dashed",alpha=0.5) +
+  theme_minimal() +
+  scale_color_brewer(palette = "Set1") +
+  scale_x_discrete("Year",limits=unique(mydf.new$year),expand = c(0,2)) +
+  scale_y_continuous("Employment rate",limits=c(0,max(mydf.new$CI_Hi))) + 
+  theme(legend.title=element_blank(),legend.justification=c(0.5,0), legend.position=c(0.5,0.2))
+ggsave("../figures/Fig1_graph_ssb_alt.png",width=4,height=4)
+```
+
+```{r}
+# Alternative graph: male and female separately
+mydf.female <- subset(AnalyticValidityTables1,(DemoGroup == "black females" ) & TypeBenefit=="own retirement") %>%
+  gather(key,value,-DemoGroup,-TypeBenefit,-year) %>%
+  separate(col = key,into=c("SynComplt","Stat"),extra="merge") %>%
+  spread(key = Stat,value = value) %>%
+  unite(Type,SynComplt,DemoGroup,sep=", ") %>%
+  group_by(year,Type)
+k.female <- ggplot(mydf.female,aes(x=year,y=Mean,fill=Type,color=Type))
+
+k.female + geom_errorbar(aes(ymin=CI_Lo,ymax=CI_Hi),alpha=0.9,width=1,position=position_dodge(1))  +
+  geom_point(color="grey20",aes(shape=Type),size=2,position=position_dodge(0.9)) +
+  geom_line(aes(linetype=Type),alpha=0.5) +
+  theme_minimal() +
+  #scale_color_brewer(palette = "Set1") +
+  scale_colour_grey(start = 0 , end=0.3) +
+  scale_x_discrete("Year",limits=unique(mydf.new$year),expand = c(0,2)) +
+  scale_y_continuous("Employment rate",limits=c(0,max(mydf.new$CI_Hi))) + 
+  theme(legend.title=element_blank(),legend.justification=c(0.5,0), legend.position=c(0.3,0.2),
+        legend.key.width = unit(2,"cm"))
+ggsave("../figures/Fig1_graph_ssb_alt_female.png",width=8,height=4)
+ggsave("../figures/Fig1_graph_ssb_alt_female.svg",width=8,height=4)
+ggsave("../figures/Fig1_graph_ssb_alt_female.tiff",width=8,height=4)
+```
+
+```{r}
+# Alternative graph: male and female separately
+mydf.male <- subset(AnalyticValidityTables1,(DemoGroup == "black males" ) & TypeBenefit=="own retirement") %>%
+  gather(key,value,-DemoGroup,-TypeBenefit,-year) %>%
+  separate(col = key,into=c("SynComplt","Stat"),extra="merge") %>%
+  spread(key = Stat,value = value) %>%
+  unite(Type,SynComplt,DemoGroup,sep=", ") %>%
+  group_by(year,Type)
+k.male <- ggplot(mydf.male,aes(x=year,y=Mean,fill=Type,color=Type))
+
+k.male + geom_errorbar(aes(ymin=CI_Lo,ymax=CI_Hi),alpha=0.9,width=1,position=position_dodge(1))  +
+  geom_point(color="grey20",aes(shape=Type),size=2,position=position_dodge(0.9)) +
+  geom_line(aes(linetype=Type),alpha=0.5) +
+  theme_minimal() +
+  #scale_color_brewer(palette = "Set1") +
+  scale_colour_grey(start = 0 , end=0.3) +
+  scale_x_discrete("Year",limits=unique(mydf.new$year),expand = c(0,2)) +
+  scale_y_continuous("Employment rate",limits=c(0,max(mydf.new$CI_Hi))) + 
+  theme(legend.title=element_blank(),legend.justification=c(0.5,0), legend.position=c(0.3,0.2),
+        legend.key.width = unit(2,"cm"))
+ggsave("../figures/Fig1_graph_ssb_alt_male.png",width=8,height=4)
+ggsave("../figures/Fig1_graph_ssb_alt_male.svg",width=8,height=4)
+ggsave("../figures/Fig1_graph_ssb_alt_male.tiff",width=8,height=4)
+```
